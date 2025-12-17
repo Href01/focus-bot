@@ -1,3 +1,5 @@
+from flask import Flask
+from threading import Thread
 import discord
 from discord.ext import commands
 from datetime import datetime
@@ -8,14 +10,15 @@ WORK_VOICE_CHANNEL = "💻 work-focus"
 LOG_TEXT_CHANNEL = "work-logs"
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Discord intents
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-
 active_sessions = {}
 
+# --- Discord Events ---
 @bot.event
 async def on_ready():
     print(f"✅ Bot connected as {bot.user}")
@@ -24,7 +27,6 @@ async def on_ready():
 async def on_voice_state_update(member, before, after):
     guild = member.guild
     log_channel = discord.utils.get(guild.text_channels, name=LOG_TEXT_CHANNEL)
-
     if not log_channel:
         return
 
@@ -45,7 +47,6 @@ async def on_voice_state_update(member, before, after):
         if start:
             end = datetime.now()
             minutes = round((end - start).total_seconds() / 60, 1)
-
             await log_channel.send(
                 f"⏹ **Session ended**\n"
                 f"👤 {member.display_name}\n"
@@ -55,5 +56,21 @@ async def on_voice_state_update(member, before, after):
                 f"📅 {end.date()}"
             )
 
-bot.run(TOKEN)
+# --- Keep-Alive Web Server for Render ---
+app = Flask('')
 
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    app.run(host="0.0.0.0", port=8080)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+keep_alive()  # Start web server BEFORE running the bot
+
+# --- Run the bot ---
+bot.run(TOKEN)
