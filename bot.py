@@ -3,20 +3,22 @@ from threading import Thread
 import discord
 from discord.ext import commands
 from datetime import datetime
+from zoneinfo import ZoneInfo  # Python 3.9+ for Casablanca timezone
 import os
 
-# CONFIG
+# ---------------- CONFIG ----------------
 WORK_VOICE_CHANNEL = "💻 work-focus"
 LOG_TEXT_CHANNEL = "work-logs"
 TOKEN = os.getenv("DISCORD_TOKEN")
+CASABLANCA_TZ = ZoneInfo("Africa/Casablanca")
 
-# Discord intents
+# ---------------- DISCORD BOT ----------------
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-active_sessions = {}
+active_sessions = {}  # store join times
 
 # --- Discord Events ---
 @bot.event
@@ -30,22 +32,24 @@ async def on_voice_state_update(member, before, after):
     if not log_channel:
         return
 
-    # JOIN WORK CHANNEL
+    # -------- JOIN WORK CHANNEL --------
     if after.channel and after.channel.name == WORK_VOICE_CHANNEL:
-        active_sessions[member.id] = datetime.now()
+        now = datetime.now(CASABLANCA_TZ)
+        active_sessions[member.id] = now
         await log_channel.send(
             f"▶️ **Session started**\n"
             f"👤 {member.display_name}\n"
-            f"⏰ {datetime.now().strftime('%H:%M')}"
+            f"⏰ {now.strftime('%H:%M')}\n"
+            f"📅 {now.date()}"
         )
 
-    # LEAVE WORK CHANNEL
+    # -------- LEAVE WORK CHANNEL --------
     if before.channel and before.channel.name == WORK_VOICE_CHANNEL and (
         not after.channel or after.channel.name != WORK_VOICE_CHANNEL
     ):
         start = active_sessions.pop(member.id, None)
         if start:
-            end = datetime.now()
+            end = datetime.now(CASABLANCA_TZ)
             minutes = round((end - start).total_seconds() / 60, 1)
             await log_channel.send(
                 f"⏹ **Session ended**\n"
@@ -56,7 +60,7 @@ async def on_voice_state_update(member, before, after):
                 f"📅 {end.date()}"
             )
 
-# --- Keep-Alive Web Server for Render ---
+# ---------------- FLASK KEEP-ALIVE ----------------
 app = Flask('')
 
 @app.route('/')
@@ -70,7 +74,7 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-keep_alive()  # Start web server BEFORE running the bot
+keep_alive()  # start Flask server
 
-# --- Run the bot ---
+# ---------------- RUN BOT ----------------
 bot.run(TOKEN)
